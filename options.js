@@ -1,10 +1,7 @@
-var browser: Browser = browser || chrome;
-
+var browser = browser || chrome;
 browser.storage.local.get(['theme'], obj => {
-
-    var theme: string = obj.theme || 'green-red';
+    var theme = obj.theme || 'green-red';
     var themeSettingsContainer = document.getElementById('theme-settings');
-
     [
         'green-red',
         'purple-yellow',
@@ -19,18 +16,12 @@ browser.storage.local.get(['theme'], obj => {
         </label>
         `);
     });
-
 });
-
 document.getElementById('save-button').addEventListener('click', async () => {
-    var theme = (<HTMLInputElement>
-        [...document.querySelectorAll('.shinigami-eyes-theme input')]
-            .filter(x => (<HTMLInputElement>x).checked)[0]
-    ).dataset.theme;
-    browser.runtime.sendMessage(<ShinigamiEyesCommand>{ closeCallingTab: true, setTheme: theme }, () => { });
+    var theme = [...document.querySelectorAll('.shinigami-eyes-theme input')]
+        .filter(x => x.checked)[0].dataset.theme;
+    browser.runtime.sendMessage({ closeCallingTab: true, setTheme: theme }, () => { });
 });
-
-
 document.getElementById('cancel-button').addEventListener('click', async () => {
-    browser.runtime.sendMessage(<ShinigamiEyesCommand>{ closeCallingTab: true }, () => { });
+    browser.runtime.sendMessage({ closeCallingTab: true }, () => { });
 });

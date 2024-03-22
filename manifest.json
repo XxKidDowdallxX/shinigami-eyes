@@ -1,0 +1,41 @@
+{
+   "applications": {
+      "gecko": {
+         "id": "shinigamieyes@shinigamieyes",
+         "strict_min_version": "60.0"
+      }
+   },
+   "author": "Shinigami Eyes",
+   "background": {
+      "service_worker": "background.js",
+      "type": "module"
+   },
+   "content_scripts": [ {
+      "all_frames": true,
+      "css": [ "content.css" ],
+      "js": [ "content-color.js" ],
+      "matches": [ "*://*.facebook.com/*", "*://*.youtube.com/*", "*://*.reddit.com/*", "*://*.twitter.com/*", "*://*.x.com/*", "*://*.medium.com/*", "*://disqus.com/*", "*://*.tumblr.com/*", "*://*.wikipedia.org/*", "*://*.rationalwiki.org/*", "*://cohost.org/*", "*://*.bsky.app/*", "*://anarchism.space/*", "*://aus.social/*", "*://c.im/*", "*://chaos.social/*", "*://eightpoint.app/*", "*://eldritch.cafe/*", "*://fosstodon.org/*", "*://hachyderm.io/*", "*://infosec.exchange/*", "*://kolektiva.social/*", "*://mas.to/*", "*://masto.ai/*", "*://mastodon.art/*", "*://mastodon.cloud/*", "*://mastodon.green/*", "*://mastodon.ie/*", "*://mastodon.lol/*", "*://mastodon.nz/*", "*://mastodon.online/*", "*://mastodon.scot/*", "*://mastodon.social/*", "*://mastodon.world/*", "*://mastodon.xyz/*", "*://mastodonapp.uk/*", "*://meow.social/*", "*://mstdn.ca/*", "*://mstdn.jp/*", "*://mstdn.social/*", "*://octodon.social/*", "*://ohai.social/*", "*://pixelfed.social/*", "*://queer.party/*", "*://sfba.social/*", "*://social.transsafety.network/*", "*://tech.lgbt/*", "*://techhub.social/*", "*://toot.cat/*", "*://toot.community/*", "*://toot.wales/*", "*://vulpine.club/*", "*://wandering.shop/*", "*://*.threads.net/*", "*://duckduckgo.com/*", "*://*.bing.com/*", "*://*.google.ar/*", "*://*.google.at/*", "*://*.google.be/*", "*://*.google.ca/*", "*://*.google.ch/*", "*://*.google.co.uk/*", "*://*.google.com/*", "*://*.google.de/*", "*://*.google.dk/*", "*://*.google.es/*", "*://*.google.fi/*", "*://*.google.fr/*", "*://*.google.is/*", "*://*.google.it/*", "*://*.google.no/*", "*://*.google.pt/*", "*://*.google.se/*" ],
+      "run_at": "document_start"
+   }, {
+      "all_frames": true,
+      "js": [ "content.js" ],
+      "matches": [ "*://*/*" ]
+   } ],
+   "description": "Highlights transphobic/anti-LGBT and trans-friendly subreddits/users/facebook pages/groups with different colors.",
+   "homepage_url": "https://shinigami-eyes.github.io/",
+   "host_permissions": [ "*://*/*" ],
+   "icons": {
+      "128": "icons/icon-128-96.png",
+      "48": "icons/icon-48.png"
+   },
+   "key": "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAzB+kIJ44jPpO7akMR/lMGYq66zFwouvaH/9qex0ECS1tHj2djK5LbPVgMwV8MoGjhSG/m6yY5msIaaNyIexNh3EcU7BYoBUBUrmUUZ698LqzLW3gQKu1gJKnswcO0o6MUrF6fhS47+/n9UI18hpYs+KW6O0M4jJ4MWiXFIG095f5qZfHx0KrvyMb3wBgqAdU8OwtmRwj/9WnZuSSUiSwSCcLhjB4DqVG1AM9xDerR6nRO4QiikCAOFEOChejddfJHdjBPEIJl1/q/AbnXKw8WWcfTSqdXb79CLNy6613fgkO/oFbQwvPaQeqyjxBV8C5d+wnKu6dNM9bidFZplenZwIDAQAB",
+   "manifest_version": 3,
+   "name": "Shinigami Eyes",
+   "options_ui": {
+      "open_in_tab": true,
+      "page": "options.html"
+   },
+   "permissions": [ "contextMenus", "storage" ],
+   "update_url": "https://clients2.google.com/service/update2/crx",
+   "version": "1.0.34"
+}

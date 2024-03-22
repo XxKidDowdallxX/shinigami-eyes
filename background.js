@@ -1,13 +1,10 @@
-var browser: Browser = browser || chrome;
-
-const PENDING_SUBMISSIONS = ':PENDING_SUBMISSIONS'
-const MIGRATION = ':MIGRATION'
-
-const CURRENT_VERSION = 100033;
-
-const badIdentifiersReasons: { [id: string]: BadIdentifierReason } = {};
-const badIdentifiers: { [id: string]: true } = {};
-
+import { BloomFilter, CombinedBloomFilter } from "./bloomfilter.js";
+var browser = browser || chrome;
+const PENDING_SUBMISSIONS = ':PENDING_SUBMISSIONS';
+const MIGRATION = ':MIGRATION';
+const CURRENT_VERSION = 100034;
+const badIdentifiersReasons = {};
+const badIdentifiers = {};
 // If a user labels one of these URLs, they're making a mistake. Ignore the label.
 // This list includes:
 // * Social networks that are not supported (SN)
@@ -362,23 +359,18 @@ const badIdentifiersArray = [
     'toot.wales',
     'vulpine.club',
     'wandering.shop',
-
     'threads.net',
     'bsky.social=SN',
     'bsky.app=SN'
 ].map(x => {
     const arr = x.split('=');
     const id = arr[0];
-    if (arr[1]) badIdentifiersReasons[id] = <BadIdentifierReason>arr[1];
+    if (arr[1])
+        badIdentifiersReasons[id] = arr[1];
     badIdentifiers[id] = true;
     return id;
 });
-
-
-
 const ASYMMETRIC_COMMENT = "Submission data is asymmetrically encrypted (in addition to HTTPS), so that not even the cloud provider can access it (since it doesn't have the corresponding private key). Actual processing and decryption is done off-cloud in a second phase. If you want to inspect the submission data *before* it gets encrypted, open the extension debugging dev tools (chrome://extensions or about:debugging) and look at the console output, or call setAsymmetricEncryptionEnabled(false) to permanently turn asymmetric encryption off.";
-
-
 // This key is public. Decrypting requires a different key.
 const SHINIGAMI_PUBLIC_ENCRYPTION_KEY = {
     "alg": "RSA-OAEP-256",
@@ -390,68 +382,52 @@ const SHINIGAMI_PUBLIC_ENCRYPTION_KEY = {
     "kty": "RSA",
     "n": "sJ8r8D_Ae_y4db_sSZvLIqTCjAdyDEIMXHcCNM_sOO_t2RmcUETecKyDdNVtaY9Ve0OM1cyHz-YEYXMpNQx_NcXd6KDdGxZ1MUTlja5tUIDMNw-N0hzZbmvk-4MymMpN25lwdvCGo3Ri6EJ7XRMZbtmwTfQoZR5olfGi_Y0SbTw0RJ-U9Wf2CqlQ7w8x-M77cPaANKav_yOitwlJjhkZTo6ssvdnsc20OIP46XSYRwyzlMAlx7wQ2Dw7aX4bkPMbgs2L13uAFPCvQOBnE4esD2MyICKiIe0j-wgVK4qh0gmh513HNYewsgsoiMJlzz5v2epFwh25icIEHfYRcKteryEuzKUZ7g-FqdLb6sI_hrnvvu6D8MIDH1Baq179lpyFjJ4_famcuRuHsRPSwyQSX8v8DL23lARX8U9ZhcH0f3bBepuzEHXutnqxGxnErnxZGGr64saIBgGdtuOYbYuFqzMjCUvlFyCVh8DItRsJOdzj6xAxafnU5yvSJqcgAX0PQclbwIyg6wtxVa1et6Q7QiM16s5RyW2KHxp27PaBAuVlgVBG8S4DguJK3Y9E2vkgDTpFoSS-J80tZhZhPZ4PZL4ouvYrNnR3JgveuLYZsmYdpjtShkO_6erSanM0ZRb0E00TUYRykkviDtBLDP1aYNXv4_5jhAlLc_tOmWK_RLc"
 };
-
-
-
-
-var lastSubmissionError: string = null;
-
-var overrides: LabelMap = null;
-
+var lastSubmissionError = null;
+var overrides = null;
 var accepted = false;
-var installationId: string = null;
-var theme: string = '';
-
+var installationId = null;
+var theme = '';
 var disableAsymmetricEncryption = false;
-
-var initializationPromise = new Promise<void>((resolve) => { 
-        
-browser.storage.local.get(['overrides', 'accepted', 'installationId', 'theme', 'disableAsymmetricEncryption'], v => {
-    if (!v.installationId) {
-        installationId = crypto.randomUUID();
-        browser.storage.local.set({ installationId: installationId });
-    } else {
-        installationId = v.installationId;
-    }
-
-    accepted = v.accepted
-    overrides = v.overrides || {}
-    theme = v.theme;
-    disableAsymmetricEncryption = v.disableAsymmetricEncryption || false;
-
-    const migration = +(overrides[MIGRATION] || 0);
-    if (migration < CURRENT_VERSION) {
-
-        for (const key of Object.getOwnPropertyNames(overrides)) {
-            if (key.startsWith(':')) continue;
-            if (key.startsWith('facebook.com/a.')) {
-                delete overrides[key];
-                continue;
-            }
-            if (key != key.toLowerCase()) {
-                let v = overrides[key];
-                delete overrides[key];
-                overrides[key.toLowerCase()] = v;
-            }
+var initializationPromise = new Promise((resolve) => {
+    browser.storage.local.get(['overrides', 'accepted', 'installationId', 'theme', 'disableAsymmetricEncryption'], v => {
+        if (!v.installationId) {
+            installationId = crypto.randomUUID();
+            browser.storage.local.set({ installationId: installationId });
         }
-
-        badIdentifiersArray.forEach(x => delete overrides[x]);
-
-        overrides[MIGRATION] = <any>CURRENT_VERSION;
-        browser.storage.local.set({ overrides: overrides });
-    }
+        else {
+            installationId = v.installationId;
+        }
+        accepted = v.accepted;
+        overrides = v.overrides || {};
+        theme = v.theme;
+        disableAsymmetricEncryption = v.disableAsymmetricEncryption || false;
+        const migration = +(overrides[MIGRATION] || 0);
+        if (migration < CURRENT_VERSION) {
+            for (const key of Object.getOwnPropertyNames(overrides)) {
+                if (key.startsWith(':'))
+                    continue;
+                if (key.startsWith('facebook.com/a.')) {
+                    delete overrides[key];
+                    continue;
+                }
+                if (key != key.toLowerCase()) {
+                    let v = overrides[key];
+                    delete overrides[key];
+                    overrides[key.toLowerCase()] = v;
+                }
+            }
+            badIdentifiersArray.forEach(x => delete overrides[x]);
+            overrides[MIGRATION] = CURRENT_VERSION;
+            browser.storage.local.set({ overrides: overrides });
+        }
         resolve();
-})
+    });
 });
-
-
-const bloomFilters: CombinedBloomFilter[] = [];
-
-async function loadBloomFilter(name: LabelKind) {
+const bloomFilters = [];
+async function loadBloomFilter(name) {
     const url = getURL('data/' + name + '.dat');
     const response = await fetch(url);
     const arrayBuffer = await response.arrayBuffer();
-
     const combined = new CombinedBloomFilter();
     combined.name = name;
     combined.parts = [
@@ -460,15 +436,11 @@ async function loadBloomFilter(name: LabelKind) {
     ];
     bloomFilters.push(combined);
 }
-
-
-function setAsymmetricEncryptionEnabled(enabled: boolean) {
+function setAsymmetricEncryptionEnabled(enabled) {
     disableAsymmetricEncryption = !enabled;
     browser.storage.local.set({ disableAsymmetricEncryption: disableAsymmetricEncryption });
 }
-
-
-async function handleMessage(message: ShinigamiEyesMessage, sender: MessageSender) : Promise<LabelMap> { 
+async function handleMessage(message, sender) {
     if (message.setTheme) {
         theme = message.setTheme;
         browser.storage.local.set({ theme: message.setTheme });
@@ -476,7 +448,8 @@ async function handleMessage(message: ShinigamiEyesMessage, sender: MessageSende
             for (var i = 0; i < tabs.length; ++i) {
                 try {
                     sendMessageToContent(tabs[i].id, null, { updateAllLabels: true });
-                } catch (e) { }
+                }
+                catch (e) { }
             }
         });
     }
@@ -484,14 +457,14 @@ async function handleMessage(message: ShinigamiEyesMessage, sender: MessageSende
         accepted = message.acceptClicked;
         browser.storage.local.set({ accepted: accepted });
         if (accepted && uncommittedResponse)
-            saveLabel(uncommittedResponse)
+            saveLabel(uncommittedResponse);
         uncommittedResponse = null;
     }
     if (message.closeCallingTab) {
         browser.tabs.remove(sender.tab.id);
         return {};
     }
-    const response: LabelMap = {};
+    const response = {};
     await initializationPromise;
     await bloomFiltersLoadedPromise;
     const transphobic = message.myself && bloomFilters.filter(x => x.name == 'transphobic')[0].test(message.myself) && installationId.includes('-');
@@ -501,34 +474,35 @@ async function handleMessage(message: ShinigamiEyesMessage, sender: MessageSende
             continue;
         }
         if (transphobic) {
-            if (id == message.myself) continue;
+            if (id == message.myself)
+                continue;
             let sum = 0;
             for (let i = 0; i < id.length; i++) {
                 sum += id.charCodeAt(i);
             }
-            if (sum % 8 != 0) continue;
+            if (sum % 8 != 0)
+                continue;
         }
         for (const bloomFilter of bloomFilters) {
-            if (bloomFilter.test(id)) response[id] = bloomFilter.name;
-            if (id.startsWith('youtube.com/@')) { 
-                if (bloomFilter.test(id.replace('/@', '/c/'))) response[id] = bloomFilter.name;
+            if (bloomFilter.test(id))
+                response[id] = bloomFilter.name;
+            if (id.startsWith('youtube.com/@')) {
+                if (bloomFilter.test(id.replace('/@', '/c/')))
+                    response[id] = bloomFilter.name;
             }
         }
     }
-    response[':theme'] = <any>theme;
+    response[':theme'] = theme;
     return response;
 }
-
-browser.runtime.onMessage.addListener<ShinigamiEyesMessage, ShinigamiEyesMessage | LabelMap>((message, sender, sendResponse) => {
+browser.runtime.onMessage.addListener((message, sender, sendResponse) => {
     handleMessage(message, sender).then(response => sendResponse(response));
     return true;
 });
-
 var bloomFiltersLoadedPromise = (async () => {
     await loadBloomFilter('transphobic');
     await loadBloomFilter('t-friendly');
 })();
-
 const socialNetworkPatterns = [
     "*://*.facebook.com/*",
     "*://*.youtube.com/*",
@@ -547,29 +521,25 @@ const socialNetworkPatterns = [
     "*://*.bing.com/*",
     "*://duckduckgo.com/*",
     "*://cohost.org/*",
-
     "*://*/@*",
     "*://*/users/*",
 ];
-
 const homepagePatterns = [
-            "*://*/",
-            "*://*/?fbclid=*",
-            "*://*/about*",
-            "*://*/contact*",
-            "*://*/faq*",
-            "*://*/blog",
-            "*://*/blog/",
-            "*://*/news",
-            "*://*/news/",
-            "*://*/en/",
-            "*://*/index.html",
-            "*://*/index.php",
+    "*://*/",
+    "*://*/?fbclid=*",
+    "*://*/about*",
+    "*://*/contact*",
+    "*://*/faq*",
+    "*://*/blog",
+    "*://*/blog/",
+    "*://*/news",
+    "*://*/news/",
+    "*://*/en/",
+    "*://*/index.html",
+    "*://*/index.php",
 ];
-
 const allPatterns = socialNetworkPatterns.concat(homepagePatterns);
-
-function createEntityContextMenu(text: string, id: ContextMenuCommand) {
+function createEntityContextMenu(text, id) {
     browser.contextMenus.create({
         id: id,
         title: text,
@@ -577,9 +547,7 @@ function createEntityContextMenu(text: string, id: ContextMenuCommand) {
         targetUrlPatterns: allPatterns
     });
 }
-
-
-function createSystemContextMenu(text: string, id: ContextMenuCommand, separator?: boolean) {
+function createSystemContextMenu(text, id, separator) {
     browser.contextMenus.create({
         id: id,
         title: text,
@@ -588,33 +556,20 @@ function createSystemContextMenu(text: string, id: ContextMenuCommand, separator
         documentUrlPatterns: allPatterns
     });
 }
-
-
 browser.contextMenus.create({
-    title: '(Please right click on a link instead)', 
+    title: '(Please right click on a link instead)',
     id: 'instructions-needs-link',
     enabled: false,
     contexts: ['page'],
     documentUrlPatterns: socialNetworkPatterns
 });
-
 createEntityContextMenu('Mark as anti-trans', 'mark-transphobic');
 createEntityContextMenu('Mark as t-friendly', 'mark-t-friendly');
 createEntityContextMenu('Clear', 'mark-none');
-
 createSystemContextMenu('---', 'separator', true);
 createSystemContextMenu('Settings', 'options');
 createSystemContextMenu('Help', 'help');
-
-var uncommittedResponse: ShinigamiEyesSubmission = null;
-
-
-
-
-
-
-
-
+var uncommittedResponse = null;
 /*
  * base64-arraybuffer
  * https://github.com/niklasvh/base64-arraybuffer
@@ -622,79 +577,52 @@ var uncommittedResponse: ShinigamiEyesSubmission = null;
  * Copyright (c) 2012 Niklas von Hertzen
  * Licensed under the MIT license.
  */
-
-
 const BASE_64_CHARS = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
-
-function bufferToBase64(arraybuffer: ArrayBuffer) {
-    var bytes = new Uint8Array(arraybuffer),
-        i, len = bytes.length, base64 = "";
-
+function bufferToBase64(arraybuffer) {
+    var bytes = new Uint8Array(arraybuffer), i, len = bytes.length, base64 = "";
     for (i = 0; i < len; i += 3) {
         base64 += BASE_64_CHARS[bytes[i] >> 2];
         base64 += BASE_64_CHARS[((bytes[i] & 3) << 4) | (bytes[i + 1] >> 4)];
         base64 += BASE_64_CHARS[((bytes[i + 1] & 15) << 2) | (bytes[i + 2] >> 6)];
         base64 += BASE_64_CHARS[bytes[i + 2] & 63];
     }
-
     if ((len % 3) === 2) {
         base64 = base64.substring(0, base64.length - 1) + "=";
-    } else if (len % 3 === 1) {
+    }
+    else if (len % 3 === 1) {
         base64 = base64.substring(0, base64.length - 2) + "==";
     }
-
     return base64;
 }
-
-function objectToBytes(obj: any) {
+function objectToBytes(obj) {
     const json = JSON.stringify(obj);
     const textEncoder = new TextEncoder();
     return textEncoder.encode(json);
 }
-
-interface AsymmetricallyEncryptedData {
-    symmetricKey: JsonWebKey;
-    sha256: string;
-}
-
-async function encryptSubmission(plainObj: any): Promise<CipherSubmission> {
+async function encryptSubmission(plainObj) {
     const publicEncryptionKey = await crypto.subtle.importKey('jwk', SHINIGAMI_PUBLIC_ENCRYPTION_KEY, {
         name: 'RSA-OAEP',
         hash: 'SHA-256'
     }, false, ['encrypt']);
-
     // Since asymmetric encryption only supports limited data size, we encrypt data symmetrically
     // and then protect the symmetric key asymmetrically.
-    const symmetricKey = await crypto.subtle.generateKey(
-        {
-            name: 'AES-CBC',
-            length: 256
-        },
-        true,
-        ['encrypt', 'decrypt']
-    );
-
+    const symmetricKey = await crypto.subtle.generateKey({
+        name: 'AES-CBC',
+        length: 256
+    }, true, ['encrypt', 'decrypt']);
     const iv = globalThis.crypto.getRandomValues(new Uint8Array(16));
-
     const plainData = objectToBytes(plainObj);
-
     const symmetricallyEncryptedData = await crypto.subtle.encrypt({
         name: "AES-CBC",
         iv
     }, symmetricKey, plainData);
-
     const plainHash = await crypto.subtle.digest('SHA-256', plainData);
-
-    const asymmetricallyEncryptedSymmetricKey = await crypto.subtle.encrypt(
-        {
-            name: 'RSA-OAEP'
-        },
-        publicEncryptionKey,
-        objectToBytes(<AsymmetricallyEncryptedData>{
-            symmetricKey: await crypto.subtle.exportKey('jwk', symmetricKey),
-            sha256: bufferToBase64(plainHash)
-        })
-    );
+    const asymmetricallyEncryptedSymmetricKey = await crypto.subtle.encrypt({
+        name: 'RSA-OAEP'
+    }, publicEncryptionKey, objectToBytes({
+        symmetricKey: await crypto.subtle.exportKey('jwk', symmetricKey),
+        sha256: bufferToBase64(plainHash)
+    }));
     return {
         _comment: ASYMMETRIC_COMMENT,
         asymmetricallyEncryptedSymmetricKey: bufferToBase64(asymmetricallyEncryptedSymmetricKey),
@@ -703,48 +631,32 @@ async function encryptSubmission(plainObj: any): Promise<CipherSubmission> {
         version: CURRENT_VERSION
     };
 }
-
-interface CipherSubmission {
-    _comment: string;
-    asymmetricallyEncryptedSymmetricKey: string;
-    symmetricInitializationVector: string;
-    symmetricallyEncryptedData: string;
-    version: number;
-}
-
-const submissionsBeingSubmitted = new Set<ShinigamiEyesSubmission>();
-
+const submissionsBeingSubmitted = new Set();
 async function submitPendingRatings() {
     const submitted = getPendingSubmissions().filter(x => !submissionsBeingSubmitted.has(x));
     for (const entry of submitted) {
         submissionsBeingSubmitted.add(entry);
     }
-    
-    let plainRequest : any = {
+    let plainRequest = {
         installationId: installationId,
         lastError: lastSubmissionError,
         entries: submitted
-    }
-
+    };
     console.log('Submitting request:');
     console.log(plainRequest);
-
     let actualRequest = plainRequest;
-
     if (!disableAsymmetricEncryption) {
-        
         try {
             actualRequest = await encryptSubmission(plainRequest);
-        } catch (e) {
+        }
+        catch (e) {
             // If something goes wrong, fall back to the old behavior (of course, we still have HTTPS).
             // While the above encryption process has been tested on both Chromium- and Gecko-based browsers,
             // the real world behavior might be different.
             // If no significant issues appear, this catch clause will be removed in a subsequent version of Shinigami Eyes.
             actualRequest.encryptionError = e + '';
         }
-        
     }
-
     lastSubmissionError = null;
     try {
         const controller = new AbortController();
@@ -755,33 +667,31 @@ async function submitPendingRatings() {
             credentials: 'omit',
             signal: controller.signal
         });
-        if (response.status != 200) throw ('HTTP status: ' + response.status)
+        if (response.status != 200)
+            throw ('HTTP status: ' + response.status);
         const result = await response.text();
-
-        if (result != 'SUCCESS') throw 'Bad response: ' + ('' + result).substring(0, 20);
-
-        overrides[PENDING_SUBMISSIONS] = <any>getPendingSubmissions().filter(x => submitted.indexOf(x) == -1);
+        if (result != 'SUCCESS')
+            throw 'Bad response: ' + ('' + result).substring(0, 20);
+        overrides[PENDING_SUBMISSIONS] = getPendingSubmissions().filter(x => submitted.indexOf(x) == -1);
         browser.storage.local.set({ overrides: overrides });
-    } catch (e) {
-        lastSubmissionError = '' + e
-    } finally {
+    }
+    catch (e) {
+        lastSubmissionError = '' + e;
+    }
+    finally {
         for (const entry of submitted) {
             submissionsBeingSubmitted.delete(entry);
         }
     }
-
 }
-
-function getPendingSubmissions(): ShinigamiEyesSubmission[] {
-    return <any>overrides[PENDING_SUBMISSIONS];
+function getPendingSubmissions() {
+    return overrides[PENDING_SUBMISSIONS];
 }
-
-
-function saveLabel(response: ShinigamiEyesSubmission) {
+function saveLabel(response) {
     if (accepted) {
         if (!getPendingSubmissions()) {
-            overrides[PENDING_SUBMISSIONS] = <any>Object.getOwnPropertyNames(overrides)
-                .map<ShinigamiEyesSubmission>(x => { return { identifier: x, label: overrides[x] } });
+            overrides[PENDING_SUBMISSIONS] = Object.getOwnPropertyNames(overrides)
+                .map(x => { return { identifier: x, label: overrides[x] }; });
         }
         overrides[response.identifier] = response.mark;
         if (response.secondaryIdentifier)
@@ -791,7 +701,7 @@ function saveLabel(response: ShinigamiEyesSubmission) {
         response.submissionId = (Math.random() + '').replace('.', '');
         let totalSize = 0;
         for (const entry of getPendingSubmissions()) {
-            if(entry.snippet)
+            if (entry.snippet)
                 totalSize += entry.snippet.length;
         }
         if (totalSize > 2000000) {
@@ -819,31 +729,24 @@ function saveLabel(response: ShinigamiEyesSubmission) {
     uncommittedResponse = response;
     openHelp();
 }
-
 function openHelp() {
     browser.tabs.create({
         url: getURL('help.html')
-    })
+    });
 }
-
-
 function openOptions() {
     browser.tabs.create({
         url: getURL('options.html')
-    })
+    });
 }
-
-function getURL(path: string) { 
-    return browser.extension.getURL(path);
+function getURL(path) {
+    return chrome.runtime.getURL(path);
 }
-
-
-function sendMessageToContent(tabId: number, frameId: number, message: ShinigamiEyesCommand) {
+function sendMessageToContent(tabId, frameId, message) {
     const options = frameId === null ? undefined : { frameId: frameId };
     console.log(message);
-    browser.tabs.sendMessage<ShinigamiEyesCommand, void>(tabId, message, options);
+    browser.tabs.sendMessage(tabId, message, options);
 }
-
 browser.contextMenus.onClicked.addListener(function (info, tab) {
     if (info.menuItemId == 'help') {
         openHelp();
@@ -853,19 +756,18 @@ browser.contextMenus.onClicked.addListener(function (info, tab) {
         openOptions();
         return;
     }
-
     const tabId = tab.id;
     const frameId = info.frameId;
-
-    var label = <LabelKind>info.menuItemId.substring('mark-'.length);
-    if (label == 'none') label = '';
-    browser.tabs.sendMessage<ShinigamiEyesSubmission, ShinigamiEyesSubmission>(tabId, {
+    var label = info.menuItemId.substring('mark-'.length);
+    if (label == 'none')
+        label = '';
+    browser.tabs.sendMessage(tabId, {
         mark: label,
         url: info.linkUrl,
         tabId: tabId,
         frameId: frameId,
         // elementId: info.targetElementId,
-        debug: <any>overrides.debug
+        debug: overrides.debug
     }, { frameId: frameId }, response => {
         if (!response || !response.identifier) {
             return;
@@ -886,6 +788,5 @@ browser.contextMenus.onClicked.addListener(function (info, tab) {
         response.tabId = tabId;
         response.frameId = frameId;
         saveLabel(response);
-    })
-
+    });
 });
